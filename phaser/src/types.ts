@@ -61,9 +61,47 @@ export interface RuntimeAnimation {
   slots: SlotTrack[];
   drawOrder: DrawOrderKey[];
   events: RuntimeEvent[];
-  deform?: unknown[];
-  ik?: unknown[];
-  transform?: unknown[];
+  deform: DeformTrack[];
+  ik: ConstraintScalarTrack[];
+  transform: TransformConstraintTrack[];
+}
+
+export interface DeformKey {
+  time: number;
+  offsets: number[];
+  curve: Curve;
+}
+
+export interface DeformTrack {
+  slot: string;
+  attachment: string;
+  keys: DeformKey[];
+}
+
+export interface ConstraintScalarTrack {
+  constraint: string;
+  channel: "mix" | "softness" | "bend_direction";
+  keys: ScalarKey[];
+}
+
+export interface TransformMixValue {
+  rotate: number;
+  translate_x: number;
+  translate_y: number;
+  scale_x: number;
+  scale_y: number;
+  shear_x: number;
+  shear_y: number;
+}
+
+export interface TransformMixKey extends TransformMixValue {
+  time: number;
+  curve: Curve;
+}
+
+export interface TransformConstraintTrack {
+  constraint: string;
+  keys: TransformMixKey[];
 }
 
 export interface RuntimeBone {
@@ -104,16 +142,85 @@ export interface RegionAttachment {
   source_height: number;
   pivot_x: number;
   pivot_y: number;
+  uv: number[];
+  sequence: RuntimeSequence | null;
 }
+
+export interface RuntimeSequence {
+  frames: string[];
+  fps: number;
+  mode: "hold" | "once" | "loop" | "ping_pong" | "once_reverse" | "loop_reverse" | "ping_pong_reverse";
+  setup_index: number;
+}
+
+export interface VertexInfluence {
+  bone: string;
+  x: number;
+  y: number;
+  weight: number;
+}
+
+export interface MeshAttachment {
+  type: "mesh";
+  texture: string;
+  vertices: number[];
+  uvs: number[];
+  triangles: number[];
+  weights: Array<{ count: number; bones: VertexInfluence[] }>;
+  weighted: boolean;
+  vertex_count: number;
+  linked: { skin: string; slot: string; attachment: string; inherit_deform: boolean } | null;
+  sequence: RuntimeSequence | null;
+}
+
+export interface PathAttachment {
+  type: "path";
+  vertices: number[];
+  vertex_count: number;
+  closed: boolean;
+  constant_speed: boolean;
+}
+
+export interface ClippingAttachment {
+  type: "clipping";
+  vertices: number[];
+  vertex_count: number;
+  end_slot: string | null;
+}
+
+export interface BoundingBoxAttachment {
+  type: "bounding_box";
+  vertices: number[];
+  vertex_count: number;
+  weights: Array<{ count: number; bones: VertexInfluence[] }>;
+  weighted: boolean;
+}
+
+export interface PointAttachment {
+  type: "point";
+  x: number;
+  y: number;
+  rotation: number;
+}
+
+export type RuntimeAttachment =
+  | RegionAttachment
+  | MeshAttachment
+  | PathAttachment
+  | ClippingAttachment
+  | BoundingBoxAttachment
+  | PointAttachment;
 
 export interface SkinAttachment {
   slot: string;
   name: string;
-  attachment: RegionAttachment | { type: string; [key: string]: unknown };
+  attachment: RuntimeAttachment;
 }
 
 export interface RuntimeSkin {
   name: string;
+  bones: string[];
+  constraints: string[];
   attachments: SkinAttachment[];
 }
 
@@ -153,8 +260,8 @@ export interface RuntimeRigData {
   drawOrder: string[];
   defaultSkin: string | null;
   skins: RuntimeSkin[];
-  constraints: unknown[];
-  constraintOrder: unknown[];
+  constraints: RuntimeConstraint[];
+  constraintOrder: string[];
   animations: Record<string, RuntimeAnimation>;
   atlas: RuntimeAtlas | null;
 }
@@ -185,16 +292,73 @@ export interface SlotPose {
   attachment: string | null;
   visible: boolean;
   color: readonly [number, number, number, number];
+  sequenceFrame: number;
 }
 
 export interface RigPose {
   bones: BonePose[];
   slots: SlotPose[];
   drawOrder: string[];
+  deforms: Readonly<Record<string, readonly number[]>>;
 }
 
 export interface AnimationLayer {
   animation: string;
   time: number;
   alpha: number;
+}
+
+interface ConstraintBase {
+  name: string;
+  target: string;
+  bones: string[];
+  mix: number;
+}
+
+export interface IkConstraint extends ConstraintBase {
+  type: "ik";
+  bend_direction: number;
+  softness: number;
+  stretch: boolean;
+  stretch_limit: number;
+  stiffness: number;
+}
+
+export interface TransformConstraint extends ConstraintBase {
+  type: "transform";
+  mixes: TransformMixValue;
+  offsets: { x: number; y: number; rotation: number; scale_x: number; scale_y: number; shear_x: number; shear_y: number };
+  local: boolean;
+  relative: boolean;
+}
+
+export interface PhysicsConstraint extends ConstraintBase {
+  type: "physics";
+  physics: { inertia: number; strength: number; damping: number; mass: number };
+  forces: { wind_x: number; wind_y: number; gravity_x: number; gravity_y: number };
+  channels: { rotate: boolean; translate: boolean };
+}
+
+export interface PathConstraint extends ConstraintBase {
+  type: "path";
+  slot: string;
+  path: { position: number; spacing: number; mix_rotate: number; mix_translate: number };
+}
+
+export type RuntimeConstraint = IkConstraint | TransformConstraint | PhysicsConstraint | PathConstraint;
+
+export interface PhysicsBoneState {
+  rotation: number;
+  rotationVelocity: number;
+  x: number;
+  y: number;
+  velocityX: number;
+  velocityY: number;
+  anchorX?: number;
+  anchorY?: number;
+  remainder: number;
+}
+
+export interface EvaluationState {
+  physics: Map<string, PhysicsBoneState>;
 }

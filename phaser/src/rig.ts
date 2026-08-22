@@ -79,16 +79,15 @@ export function animationOf(rig: RuntimeRigData, name: string): RuntimeAnimation
 
 export function unsupportedFeatures(rig: RuntimeRigData): string[] {
   const features = new Set<string>();
-  if (rig.constraints.length > 0) features.add("constraints");
+  const attachmentTypes = new Set(["region", "mesh", "clipping", "bounding_box", "path", "point"]);
+  const constraintTypes = new Set(["ik", "transform", "physics", "path"]);
+  for (const constraint of rig.constraints) {
+    if (!constraintTypes.has(constraint.type)) features.add(`${constraint.type} constraints`);
+  }
   for (const skin of rig.skins) {
     for (const entry of skin.attachments) {
-      if (entry.attachment.type !== "region") features.add(`${entry.attachment.type} attachments`);
+      if (!attachmentTypes.has(entry.attachment.type)) features.add(`${entry.attachment.type} attachments`);
     }
-  }
-  for (const animation of Object.values(rig.animations)) {
-    if ((animation.deform?.length ?? 0) > 0) features.add("deform timelines");
-    if ((animation.ik?.length ?? 0) > 0) features.add("IK timelines");
-    if ((animation.transform?.length ?? 0) > 0) features.add("transform-constraint timelines");
   }
   return [...features];
 }

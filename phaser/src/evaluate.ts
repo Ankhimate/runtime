@@ -3,6 +3,7 @@ import type {
   AnimationLayer,
   BonePose,
   Curve,
+  EvaluationState,
   RigPose,
   RuntimeRigData,
   ScalarKey,
@@ -10,6 +11,7 @@ import type {
   VectorKey,
 } from "./types.js";
 import { animationOf } from "./rig.js";
+import { applyConstraints, type ConstraintOverrides } from "./constraints.js";
 
 const DEG = Math.PI / 180;
 const TAU = Math.PI * 2;
@@ -58,7 +60,7 @@ function span<T extends { time: number; curve?: Curve }>(keys: readonly T[], tim
   const from = keys[low]!;
   const to = keys[high]!;
   const raw = to.time > from.time ? (time - from.time) / (to.time - from.time) : 1;
-  return [from, to, ease(raw, to.curve ?? "linear")];
+  return [from, to, ease(raw, from.curve ?? "linear")];
 }
 
 function scalar(keys: readonly ScalarKey[], time: number, angle = false): number | undefined {
@@ -76,6 +78,14 @@ function vector(keys: readonly VectorKey[], time: number): readonly [number, num
   if (!located) return undefined;
   const [from, to, t] = located;
   return [from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t];
+}
+
+function numbers<T extends { time: number; curve: Curve }>(keys: readonly T[], time: number, read: (key: T) => readonly number[]): number[] | undefined {
+  const located = span(keys, time);
+  if (!located) return undefined;
+  const [from, to, t] = located;
+  const a = read(from); const b = read(to); const length = Math.max(a.length, b.length);
+  return Array.from({ length }, (_, index) => (a[index] ?? 0) + ((b[index] ?? 0) - (a[index] ?? 0)) * t);
 }
 
 function compose(pose: Omit<BonePose, "name" | "world">): Affine {
@@ -151,7 +161,17 @@ function stepped<T extends { time: number }>(keys: readonly T[], time: number): 
   return answer;
 }
 
-export function evaluate(rig: RuntimeRigData, layers: readonly AnimationLayer[] = []): RigPose {
+export interface EvaluateOptions {
+  state?: EvaluationState;
+  deltaSeconds?: number;
+  skin?: string;
+}
+
+export function createEvaluationState(): EvaluationState {
+  return { physics: new Map() };
+}
+
+export function evaluate(rig: RuntimeRigData, layers: readonly AnimationLayer[] = [], options: EvaluateOptions = {}): RigPose {
   const bones: BonePose[] = rig.bones.map((bone) => ({
     name: bone.name,
     x: bone.x,
@@ -168,6 +188,7 @@ export function evaluate(rig: RuntimeRigData, layers: readonly AnimationLayer[] 
     attachment: slot.attachment,
     visible: true,
     color: color(slot.color),
+    sequenceFrame: 0,
   }));
   let drawOrder = [...rig.drawOrder];
   const boneIndex = new Map(bones.map((bone, index) => [bone.name, index]));
@@ -175,6 +196,8 @@ export function evaluate(rig: RuntimeRigData, layers: readonly AnimationLayer[] 
   const attachmentWinners = new Map<number, number>();
   const visibleWinners = new Map<number, number>();
   let drawOrderWeight = -1;
+  const deforms: Record<string, number[]> = {};
+  const overrides: ConstraintOverrides = { ik: new Map(), transform: new Map() };
 
   for (const layer of layers) {
     if (layer.alpha <= 0) continue;
@@ -218,6 +241,34 @@ export function evaluate(rig: RuntimeRigData, layers: readonly AnimationLayer[] 
         slot.color = slot.color.map((component, i) => component + (key.color![i]! - component) * layer.alpha) as [number, number, number, number];
       }
     }
+    for (const track of animation.deform) {
+      const sampled = numbers(track.keys, layer.time, (key) => key.offsets);
+      if (!sampled) continue;
+      const key = `${track.slot}\0${track.attachment}`;
+      const current = deforms[key];
+      if (!current) deforms[key] = sampled.map((value) => value * layer.alpha);
+      else for (let index = 0; index < sampled.length; index += 1) current[index] = (current[index] ?? 0) + (sampled[index]! - (current[index] ?? 0)) * layer.alpha;
+    }
+    for (const track of animation.ik) {
+      const sampled = scalar(track.keys, layer.time);
+      if (sampled === undefined) continue;
+      const current = overrides.ik.get(track.constraint) ?? {};
+      if (track.channel === "mix") current.mix = (current.mix ?? constraintSetup(rig, track.constraint, "mix")) + (sampled - (current.mix ?? constraintSetup(rig, track.constraint, "mix"))) * layer.alpha;
+      else if (track.channel === "softness") current.softness = (current.softness ?? constraintSetup(rig, track.constraint, "softness")) + (sampled - (current.softness ?? constraintSetup(rig, track.constraint, "softness"))) * layer.alpha;
+      else current.bend = sampled;
+      overrides.ik.set(track.constraint, current);
+    }
+    for (const track of animation.transform) {
+      const sampled = numbers(track.keys, layer.time, (key) => [key.rotate, key.translate_x, key.translate_y, key.scale_x, key.scale_y, key.shear_x, key.shear_y]);
+      if (!sampled) continue;
+      const setup = rig.constraints.find((constraint) => constraint.name === track.constraint && constraint.type === "transform");
+      if (!setup || setup.type !== "transform") continue;
+      const current = overrides.transform.get(track.constraint) ?? setup.mixes;
+      const names = ["rotate", "translate_x", "translate_y", "scale_x", "scale_y", "shear_x", "shear_y"] as const;
+      const next = { ...current };
+      names.forEach((name, index) => { next[name] += (sampled[index]! - next[name]) * layer.alpha; });
+      overrides.transform.set(track.constraint, next);
+    }
     const drawKey = stepped(animation.drawOrder, layer.time);
     if (drawKey && layer.alpha >= drawOrderWeight) {
       drawOrder = applyDrawOrder(rig.drawOrder, drawKey.offsets);
@@ -231,17 +282,42 @@ export function evaluate(rig: RuntimeRigData, layers: readonly AnimationLayer[] 
     const source = rig.bones[index]!;
     pose.world = source.parent === -1 ? local : childWorld(bones[source.parent]!.world, pose, source);
   }
-  return { bones, slots, drawOrder };
+  const pose: RigPose = { bones, slots, drawOrder, deforms };
+  applyConstraints(rig, pose, overrides, options.state, options.deltaSeconds ?? 0, options.skin ?? rig.defaultSkin ?? undefined);
+  const dominant = [...layers].filter((layer) => layer.alpha > 0).sort((a, b) => b.alpha - a.alpha)[0];
+  applySequences(rig, pose, dominant?.time ?? 0, options.skin ?? rig.defaultSkin ?? undefined);
+  return pose;
+}
+
+function constraintSetup(rig: RuntimeRigData, name: string, field: "mix" | "softness"): number {
+  const constraint = rig.constraints.find((candidate) => candidate.name === name);
+  if (!constraint) return 0;
+  return field === "mix" ? constraint.mix : constraint.type === "ik" ? constraint.softness : 0;
+}
+
+function applySequences(rig: RuntimeRigData, pose: RigPose, time: number, skinName: string | undefined): void {
+  const skin = rig.skins.find((candidate) => candidate.name === skinName);
+  if (!skin) return;
+  for (const slot of pose.slots) {
+    if (!slot.attachment) continue;
+    const attachment = skin.attachments.find((entry) => entry.slot === slot.name && entry.name === slot.attachment)?.attachment;
+    const sequence = attachment && (attachment.type === "region" || attachment.type === "mesh") ? attachment.sequence : null;
+    if (!sequence || sequence.frames.length === 0) continue;
+    const count = sequence.frames.length; const start = Math.max(0, Math.min(count - 1, sequence.setup_index));
+    if (sequence.fps <= 0 || sequence.mode === "hold") { slot.sequenceFrame = start; continue; }
+    const elapsed = Math.floor(time * sequence.fps);
+    const reverse = sequence.mode.endsWith("reverse");
+    const walked = start + (reverse ? -elapsed : elapsed);
+    if (sequence.mode.startsWith("once")) slot.sequenceFrame = Math.max(0, Math.min(count - 1, walked));
+    else if (sequence.mode.startsWith("loop")) slot.sequenceFrame = ((walked % count) + count) % count;
+    else { const span = Math.max(1, 2 * count - 2); const phase = ((walked % span) + span) % span; slot.sequenceFrame = phase < count ? phase : span - phase; }
+  }
 }
 
 function applyDrawOrder(setup: readonly string[], offsets: readonly { slot: string; offset: number }[]): string[] {
-  const result = [...setup];
-  for (const { slot, offset } of offsets) {
-    const from = result.indexOf(slot);
-    if (from < 0) continue;
-    result.splice(from, 1);
-    const to = Math.max(0, Math.min(result.length, from + offset));
-    result.splice(to, 0, slot);
-  }
-  return result;
+  const offsetBySlot = new Map(offsets.map((entry) => [entry.slot, entry.offset]));
+  return setup.map((slot, index) => {
+    const offset = offsetBySlot.get(slot) ?? 0;
+    return { slot, target: index + offset + Math.sign(offset) * 0.5 };
+  }).sort((a, b) => a.target - b.target).map((entry) => entry.slot);
 }

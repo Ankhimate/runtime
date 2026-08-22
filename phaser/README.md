@@ -41,26 +41,26 @@ update(_time: number, delta: number) {
 tests. Times accepted by those APIs are seconds; `PhaserRig.update` accepts the
 millisecond delta supplied by Phaser.
 
-## Supported in 0.1
+## Runtime coverage
 
 - setup poses and parented affine bone transforms;
 - linear, stepped, and cubic-bezier keys;
-- translation, shortest-arc rotation, multiplicative scale, and shear tracks in
-  the headless evaluator;
+- translation, shortest-arc rotation, multiplicative scale, and shear tracks;
 - looping, non-looping playback, crossfades, and events;
 - slot visibility, color, attachment, and draw-order tracks;
-- atlas-backed region attachments and trimmed atlas frames.
+- IK, transform, path, and deterministic fixed-step physics constraints in
+  authored order, including their animation timelines;
+- exact affine region quads, weighted and rigid meshes, linked meshes, and
+  per-influence deform timelines;
+- clipping polygons, trimmed and rotated atlas frames, attachment sequences,
+  and normal/additive/multiply/screen slot blending;
+- world-space bounding-box, path, clipping, and point queries through
+  `attachmentWorldVertices` and `attachmentWorldPoint`.
 
-`PhaserRig.unsupported` reports features present in a rig that this version does
-not evaluate: constraints, mesh/path attachments, deform timelines, and
-constraint timelines. Rotated atlas regions are hidden. These cases are kept
-explicit because drawing an incorrect pose is harder to diagnose than a clear
-capability report.
-
-Phaser Images have no skew transform. `PhaserRig` therefore projects a sheared
-world affine to position, rotation, and scale when drawing a region; use the
-headless pose matrices for exact shear-aware custom rendering. This limitation
-does not affect rigs whose evaluated world transforms have no shear.
+Rendering uses Phaser WebGL Mesh objects because Phaser Images cannot represent
+general affine shear or weighted geometry. Constructing `PhaserRig` under the
+Canvas renderer therefore throws a clear error; headless `RigPlayer` and
+`evaluate` remain renderer-independent.
 
 Phaser 4 is intentionally outside the 0.1 peer range; its renderer API is a
 separate integration target.

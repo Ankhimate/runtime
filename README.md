@@ -5,7 +5,7 @@ independent package because engine APIs and release cycles differ.
 
 | Runtime | Status |
 |---|---|
-| [`phaser/`](phaser/) | Phaser 3 package, initial implementation |
+| [`phaser/`](phaser/) | Phaser 3 runtime |
 
 The repository is intentionally ready for runtimes in other languages and
 engines without making them depend on the editor or on one another.

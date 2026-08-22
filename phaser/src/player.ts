@@ -1,4 +1,4 @@
-import { evaluate } from "./evaluate.js";
+import { createEvaluationState, evaluate } from "./evaluate.js";
 import { animationOf } from "./rig.js";
 import type { AnimationLayer, RigPose, RuntimeEvent, RuntimeRigData } from "./types.js";
 
@@ -14,9 +14,12 @@ export class RigPlayer {
   private outgoing: TrackState | undefined;
   private fadeDuration = 0;
   private fadeTime = 0;
+  private readonly evaluationState = createEvaluationState();
+  private skinName: string | undefined;
 
   constructor(rig: RuntimeRigData) {
     this.rig = rig;
+    this.skinName = rig.defaultSkin ?? undefined;
   }
 
   get animation(): string | undefined {
@@ -34,6 +37,7 @@ export class RigPlayer {
     this.outgoing = undefined;
     this.fadeDuration = 0;
     this.fadeTime = 0;
+    this.evaluationState.physics.clear();
     return this;
   }
 
@@ -53,6 +57,12 @@ export class RigPlayer {
     return this;
   }
 
+  setSkin(name: string): this {
+    if (!this.rig.skins.some((skin) => skin.name === name)) throw new Error(`unknown skin ${JSON.stringify(name)}`);
+    this.skinName = name;
+    return this;
+  }
+
   update(deltaSeconds: number): RigPose {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
       throw new RangeError("deltaSeconds must be a finite non-negative number");
@@ -69,10 +79,10 @@ export class RigPlayer {
       this.fadeTime += deltaSeconds;
       if (this.fadeTime >= this.fadeDuration) this.outgoing = undefined;
     }
-    return this.pose();
+    return this.pose(deltaSeconds);
   }
 
-  pose(): RigPose {
+  pose(deltaSeconds = 0): RigPose {
     const layers: AnimationLayer[] = [];
     if (this.outgoing && this.current) {
       const incomingAlpha = Math.min(1, this.fadeTime / this.fadeDuration);
@@ -81,7 +91,9 @@ export class RigPlayer {
     } else if (this.current) {
       layers.push({ animation: this.current.animation, time: this.current.time, alpha: 1 });
     }
-    return evaluate(this.rig, layers);
+    return evaluate(this.rig, layers, this.skinName === undefined
+      ? { state: this.evaluationState, deltaSeconds }
+      : { state: this.evaluationState, deltaSeconds, skin: this.skinName });
   }
 }
 
