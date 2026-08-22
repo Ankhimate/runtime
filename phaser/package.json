@@ -1,0 +1,40 @@
+{
+  "name": "@ankhimate/phaser-runtime",
+  "version": "0.1.0",
+  "description": "Phaser 3 playback for Ankhimate runtime exports",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ankhimate/runtime.git",
+    "directory": "phaser"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && tsc -p tsconfig.test.json && node --test .test-dist/test/runtime.test.js"
+  },
+  "peerDependencies": {
+    "phaser": ">=3.80 <4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "phaser": "3.90.0",
+    "typescript": "^5.9.3"
+  },
+  "license": "MIT OR Apache-2.0"
+}
