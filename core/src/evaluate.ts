@@ -153,7 +153,9 @@ function color(hex: string): [number, number, number, number] {
 }
 
 function stepped<T extends { time: number }>(keys: readonly T[], time: number): T | undefined {
-  let answer = keys[0];
+  const first = keys[0];
+  if (!first || time < first.time) return undefined;
+  let answer: T = first;
   for (const key of keys) {
     if (key.time > time) break;
     answer = key;

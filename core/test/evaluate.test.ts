@@ -80,6 +80,25 @@ test("animation uses additive translation, shortest rotation, and multiplicative
   assert.equal(child.scaleY, 0.5);
 });
 
+test("a stepped attachment does not hold its first key backward", () => {
+  const rig = fixture();
+  rig.slots[0] = { ...rig.slots[0]!, attachment: null };
+  rig.animations.walk!.slots = [{
+    name: "part",
+    channel: "attachment",
+    keys: [{ time: 0.5, name: "late" }],
+  }];
+
+  assert.equal(
+    evaluate(rig, [{ animation: "walk", time: 0, alpha: 1 }]).slots[0]!.attachment,
+    null,
+  );
+  assert.equal(
+    evaluate(rig, [{ animation: "walk", time: 0.5, alpha: 1 }]).slots[0]!.attachment,
+    "late",
+  );
+});
+
 test("looping update emits every crossed event once", () => {
   const player = new RigPlayer(fixture()).play("walk").seek(0.6);
   player.update(0.8);
