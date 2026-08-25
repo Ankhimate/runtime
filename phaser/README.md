@@ -3,6 +3,10 @@
 Phaser 3 playback for the `ankhimate-runtime` JSON and baked atlas produced by
 Ankhimate's **Ankhimate runtime** export preset.
 
+Framework-independent parsing, evaluation, playback, constraints, and runtime
+types live in `@ankhimate/runtime`. This package adds only the Phaser WebGL
+renderer adapter and re-exports the core API for compatibility.
+
 ## Install
 
 ```sh

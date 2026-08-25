@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluate } from "../src/evaluate.js";
-import { RigPlayer } from "../src/player.js";
-import { parseRig, RigFormatError } from "../src/rig.js";
-import type { RuntimeRigData } from "../src/types.js";
+import { evaluate, parseRig, RigFormatError, RigPlayer } from "../src/index.js";
+import type { RuntimeRigData } from "../src/index.js";
 
 function fixture(): RuntimeRigData {
   return {

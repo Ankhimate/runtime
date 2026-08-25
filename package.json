@@ -2,11 +2,12 @@
   "name": "ankhimate-runtimes",
   "private": true,
   "workspaces": [
+    "core",
     "phaser"
   ],
   "scripts": {
-    "build": "npm run build --workspace @ankhimate/phaser-runtime",
-    "test": "npm run test --workspace @ankhimate/phaser-runtime",
-    "typecheck": "npm run typecheck --workspace @ankhimate/phaser-runtime"
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
   }
 }

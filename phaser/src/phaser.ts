@@ -1,7 +1,6 @@
 import type Phaser from "phaser";
-import { evaluate } from "./evaluate.js";
-import { RigPlayer } from "./player.js";
-import type { Affine, MeshAttachment, RegionAttachment, RigPose, RuntimeAttachment, RuntimeRigData, RuntimeSkin } from "./types.js";
+import { evaluate, RigPlayer } from "@ankhimate/runtime";
+import type { Affine, MeshAttachment, RegionAttachment, RigPose, RuntimeAttachment, RuntimeRigData, RuntimeSkin } from "@ankhimate/runtime";
 
 export interface PhaserRigOptions { pageTextureKeys: readonly string[]; skin?: string; }
 interface MeshView { object: Phaser.GameObjects.Mesh; attachmentKey: string; indices: number[]; }
